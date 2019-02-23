@@ -21,7 +21,7 @@ def init_sc(N, d, L, rand_disp=False, disp_size=0.1):
 
 
 def init_3dfcc(N, L, d=3, rand_disp=False, disp_size=0.1):
-    # Works only for 3D
+    # I don't think this function works properly...
 
     nr_one_d_points = int(np.power(N, 1 / 3))
     x_0 = np.zeros([N, d])
