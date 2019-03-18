@@ -4,178 +4,179 @@ import matplotlib.pyplot as plt
 from itertools import product
 import time
 
-# Home made module
+# Home made modules
 import remove_diag as rd
 import init_lattice as il
-
-# Constants for book keeping
-# m = 6.6e-26  # kg
-# sigma = 3.405  # Å
-# k_B = 1.38e-23  # J/K
-# epsilon = 119.8 * k_B  # J
-
-# Sim parameters
-L = 5              # Box size in units of sigma
-N = 100             # Nr of particles
-h = 1e-3            # Time step in units of sqrt(m*sigma^2/epsilon) approx 2e-12 s
-d = 3               # Dimensions
-
-v_range = 1.5       # v_max - v_min
-beta = 1/0.1        # eps/k_B*T
-t_max = 5           # Max sim time
-nr_steps = int(t_max/h)
-rescale_vel = True
-lam = 100
-
-# Calculate lattice
-t0 = time.time()
-
-# x[:,:,0] = il.init_sc(N, d, L, rand_disp=False)
-x_0, act_N = il.init_3dfcc(N, L, rand_disp=False)
-
-t1 = time.time()
-
-rho = act_N / L**d      # Number density
-print("Time to init lattice: " + str(t1 - t0))
-print("Simulation parameters")
-print("Desired N: " + str(N))
-print("Actual N: " + str(act_N))
-print("Number density: " + str(rho))
-print("Box size: " + str(L))
-
-# Allocation
-x = np.zeros([act_N, d, nr_steps])
-v = np.zeros([act_N, d, nr_steps])
-dx = np.zeros([act_N, act_N, d])
-E_tot = np.zeros(nr_steps)
-E_pot = np.zeros(nr_steps)
-E_kin = np.zeros(nr_steps)
-
-# Initial lattice positions
-x[:,:,0] = x_0
-
-# Maxwell distribution (Gaussian in components)
-v[:,:,0] = np.random.normal(loc=0.0, scale=1/np.sqrt(beta), size=(act_N, d))
-
-# x[:, :, 0] = [[-0.6, 0], [0.6, 0]]
-# v[:, :, 0] = [[2, 0], [-2, 0]]
-
-# Calculate initial distances, forces etc
-for i, j in product(range(act_N), repeat=2):
-    dx[i, j, :] = x[i, :, 0] - x[j, :, 0]
-
-# Implement boundary nearest image convention
-dx[dx > L / 2] = dx[dx > L / 2] - L
-dx[dx < -L / 2] = dx[dx < -L / 2] + L
-
-# Remove zeros on diagonal
-dx_no_diag = np.zeros([act_N, act_N - 1, d])
-
-for i in range(d):
-    dx_no_diag[:, :, i] = rd.remove_diag(dx[:, :, i])
-
-# Calc distance between
-r = np.sqrt(np.sum(np.square(dx_no_diag), 2))
-
-x_vec = dx_no_diag
-
-# Calc force vector on each particle
-F = -(np.sum((24 * (1 - 2 * np.power(r, -6)) * np.power(r, -8)).T * x_vec.T, 1)).T
+import create_results_file as crf
 
 
-# Run simulation in time
-for t in range(nr_steps - 1):
-    if t % 100 == 0:
-        print("Simulation progress: " + str(100 * t * h / t_max) + "%")
+def run_sim(h, t_max, temp, rho, d=3, n=5, plot=True, write_to_file=True):
+    # h time step
+    # t_max simulation time
+    # temp temperature
+    # rho number density
+    # d dimensions
 
-    # Calc kinetic energy
-    E_kin[t] = np.sum(np.square(v[:, :, t])) / 2
+    nr_steps = int(t_max/h)         # Number of time steps in simulation
+    N = 4 * n ** d                  # Number of particles consistent with FCC
+    L = np.power(N / rho, 1 / d)    # Simulation box size
 
-    # Rescale velocities for better temperature settings
-    if rescale_vel:
-        lam = np.sqrt(((act_N - 1) * (3 / 2)) / (E_kin[t] * beta))
-        v[:, :, t] = lam * v[:, :, t]
-        print("lambda(" + str(t) + "): " + str(lam))
+    # Calculate lattice
+    t0 = time.time()
+    x_0 = il.init_3dfcc(N, L, rand_disp=False)
+    t1 = time.time()
 
-    if abs(lam - 1) < 1e-3:
-        rescale_vel = False
+    print("Time to init lattice: " + str(t1 - t0))
+    print("Simulation parameters:")
+    print("Particle number N: " + str(N))
+    print("Number density: " + str(rho))
+    print("Box size: " + str(L))
+    print("Temperature: " + str(temp))
 
-    # Update positions
-    x[:, :, t + 1] = x[:, :, t] + v[:, :, t] * h + F * np.square(h) / 2
+    # Allocation
+    x = np.zeros([N, d, nr_steps])
+    v = np.zeros([N, d, nr_steps])
+    dx = np.zeros([N, N, d])
+    E_tot = np.zeros(nr_steps)
+    E_pot = np.zeros(nr_steps)
+    E_kin = np.zeros(nr_steps)
 
-    # Implement boundary conditions
+    # Initial lattice positions
+    x[:,:,0] = x_0
 
-    x[:, :, t + 1][x[:, :, t + 1] > L / 2] = x[:, :, t + 1][x[:, :, t + 1] > L / 2] - L
-    x[:, :, t + 1][x[:, :, t + 1] < -L / 2] = x[:, :, t + 1][x[:, :, t + 1] < -L / 2] + L
+    # Initial Maxwell distribution (Gaussian in components)
+    v[:,:,0] = np.random.normal(loc=0.0, scale=np.sqrt(temp), size=(N, d))
 
-    # Calculate force at new positions
-
-    # Calc all coordinate wise distances between particles
-    for i, j in product(range(act_N), repeat=2):
-
-        dx[i, j, :] = x[i, :, t + 1] - x[j, :, t + 1]
+    # Calculate initial distances
+    for i, j in product(range(N), repeat=2):
+        dx[i, j, :] = x[i, :, 0] - x[j, :, 0]
 
     # Implement boundary nearest image convention
     dx[dx > L / 2] = dx[dx > L / 2] - L
     dx[dx < -L / 2] = dx[dx < -L / 2] + L
 
     # Remove zeros on diagonal
-    dx_no_diag = np.zeros([act_N, act_N - 1, d])
+    dx_no_diag = np.zeros([N, N - 1, d])
 
     for i in range(d):
         dx_no_diag[:, :, i] = rd.remove_diag(dx[:, :, i])
 
-    # Calc distance between
+    # Calc initial distance between
     r = np.sqrt(np.sum(np.square(dx_no_diag), 2))
+    r_6 = np.power(r, -6)
 
     x_vec = dx_no_diag
 
-    # Calc force vector on each particle
-    F_new = -(np.sum((24 * (1 - 2 * np.power(r, -6)) * np.power(r, -8)).T * x_vec.T, 1)).T
+    # Calc initial force vector on each particle
+    F = -(np.sum((24 * (1 - 2 * np.power(r, -6)) * np.power(r, -8)).T * x_vec.T, 1)).T
 
-    # Calculate energy
-    r_6 = np.power(r, -6)
-    E_pot[t] = np.sum(4 * (r_6 - 1) * r_6) / 2
-    E_tot[t] = E_kin[t] + E_pot[t]
+    lam = 100
+    rescale_vel = True
 
-    # Update velocities
-    v[:, :, t + 1] = v[:, :, t] + (F + F_new) * h / 2
-    F = F_new
+    # Run simulation in time
+    t0 = time.time()
+    for t in range(nr_steps - 1):
+        if t % int(nr_steps / 100) == 0:
+            print("Simulation progress: " + str(np.around(100 * t * h / t_max, decimals=1)) + "%")
 
+        # Calc kinetic energy
+        E_kin[t] = np.sum(np.square(v[:, :, t])) / 2
+        # Potential
+        E_pot[t] = np.sum(4 * (r_6 - 1) * r_6) / 2
+        # Total
+        E_tot[t] = E_kin[t] + E_pot[t]
 
-fig = plt.figure(num=1, figsize=(10,5))
-if d == 2:
-    ax1 = fig.add_subplot(1, 2, 1)
-elif d == 3:
-    ax1 = fig.add_subplot(1, 2, 1, projection="3d")
+        # Rescale velocities for better temperature settings
+        if rescale_vel:
+            lam = np.sqrt(((N - 1) * (3 / 2) * temp) / (E_kin[t]))
+            v[:, :, t] = lam * v[:, :, t]
+            print("lambda(" + str(t) + "): " + str(lam))
 
-ax2 = fig.add_subplot(1, 2, 2)
+        if abs(lam - 1) < 1e-3:
+            rescale_vel = False
 
-for t in range(0, nr_steps - 1, 20):
+        # Update positions
+        x[:, :, t + 1] = x[:, :, t] + v[:, :, t] * h + F * np.square(h) / 2
 
-    ax1.clear()
-    if d == 2:
-        ax1.scatter(x[:, 0, t], x[:, 1, t], s=4, color="black")
-        ax1.set_aspect("equal", "box")
-        ax1.set_xlim(- L / 2, L / 2)
-        ax1.set_ylim(- L / 2, L / 2)
-    elif d == 3:
-        ax1.scatter(x[:, 0, t], x[:, 1, t], x[:, 2, t], s=4, color="black")
-        ax1.set_aspect("equal", "box")
-        ax1.set_xlim(- L / 2, L / 2)
-        ax1.set_ylim(- L / 2, L / 2)
-        ax1.set_zlim(- L / 2, L / 2)
-    ax1.set_title("Progress: " + str(round(100*t*h/t_max)) + "% " + " t_max = " + str(t_max))
+        # Implement boundary conditions
+        x[:, :, t + 1][x[:, :, t + 1] > L / 2] = x[:, :, t + 1][x[:, :, t + 1] > L / 2] - L
+        x[:, :, t + 1][x[:, :, t + 1] < -L / 2] = x[:, :, t + 1][x[:, :, t + 1] < -L / 2] + L
 
-    ax2.clear()
-    ax2.plot(np.linspace(0.0, (t + 1) * h, num=t + 1), E_tot[0: t + 1])
-    ax2.plot(np.linspace(0.0, (t + 1) * h, num=t + 1), E_pot[0: t + 1])
-    ax2.plot(np.linspace(0.0, (t + 1) * h, num=t + 1), E_kin[0: t + 1])
-    ax2.set_xlim(0.0, t_max)
-    ax2.set_title("Total energy")
-    ax2.set_xlabel("Time")
-    plt.pause(0.001)
+        # Calc all coordinate wise distances between particles
+        for i, j in product(range(N), repeat=2):
 
-# plt.hist(v[:,0,0], color='b')
-# plt.hist(v[:,1,0], color='r')
-plt.show()
+            dx[i, j, :] = x[i, :, t + 1] - x[j, :, t + 1]
+
+        # Implement boundary nearest image convention
+        dx[dx > L / 2] = dx[dx > L / 2] - L
+        dx[dx < -L / 2] = dx[dx < -L / 2] + L
+
+        # Remove zeros on diagonal
+        dx_no_diag = np.zeros([N, N - 1, d])
+
+        for i in range(d):
+            dx_no_diag[:, :, i] = rd.remove_diag(dx[:, :, i])
+
+        # Calc distance between
+        r = np.sqrt(np.sum(np.square(dx_no_diag), 2))
+
+        x_vec = dx_no_diag
+
+        # Calc force vector on each particle
+        F_new = -(np.sum((24 * (1 - 2 * np.power(r, -6)) * np.power(r, -8)).T * x_vec.T, 1)).T
+
+        # For calculation of energy
+        r_6 = np.power(r, -6)
+
+        # Update velocities and forces
+        v[:, :, t + 1] = v[:, :, t] + (F + F_new) * h / 2
+        F = F_new
+
+    t1 = time.time()
+    real_sim_time = t1 - t0
+    print("Simulation time: "
+          + str(int(real_sim_time / 60)) + " min " + str(np.around(real_sim_time % 60, decimals=0)) + " s")
+
+    if write_to_file:
+        # Write results to file
+        crf.create_results_file("sim_data/T_" + str(temp) + "_rho_" + str(rho) + ".txt",
+                                rho, N, L, temp, h, t_max, real_sim_time)
+
+    if plot:
+        fig = plt.figure(num=1, figsize=(10,5))
+
+        if d == 2:
+            ax1 = fig.add_subplot(1, 2, 1)
+        elif d == 3:
+            ax1 = fig.add_subplot(1, 2, 1, projection="3d")
+
+        ax2 = fig.add_subplot(1, 2, 2)
+
+        atom_color = (243 / 255, 8 / 255, 71 / 255)
+
+        for t in range(0, nr_steps - 1, 20):
+
+            ax1.clear()
+            if d == 2:
+                ax1.scatter(x[:, 0, t], x[:, 1, t], s=10, color=atom_color)
+                ax1.set_aspect("equal", "box")
+                ax1.set_xlim(- L / 2, L / 2)
+                ax1.set_ylim(- L / 2, L / 2)
+            elif d == 3:
+                ax1.scatter(x[:, 0, t], x[:, 1, t], x[:, 2, t], s=10, color=atom_color)
+                ax1.set_aspect("equal", "box")
+                ax1.set_xlim(- L / 2, L / 2)
+                ax1.set_ylim(- L / 2, L / 2)
+                ax1.set_zlim(- L / 2, L / 2)
+            ax1.set_title("Progress: " + str(round(100 * t * h / t_max)) + "% " + " t_max = " + str(t_max))
+
+            ax2.clear()
+            ax2.plot(np.linspace(0.0, (t + 1) * h, num=t + 1), E_tot[0: t + 1], color="black")
+            ax2.plot(np.linspace(0.0, (t + 1) * h, num=t + 1), E_pot[0: t + 1], color="red")
+            ax2.plot(np.linspace(0.0, (t + 1) * h, num=t + 1), E_kin[0: t + 1], color="blue")
+            ax2.set_xlim(0.0, t_max)
+            ax2.set_title("Total energy")
+            ax2.set_xlabel("Time")
+            plt.pause(0.001)
+
+        plt.show()

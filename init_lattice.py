@@ -35,9 +35,9 @@ def init_3dfcc(N, L, rand_disp=False, disp_size=0.1):
     x_0 = np.reshape(lat, (actual_N, 3))
 
     if not rand_disp:
-        return x_0, actual_N
+        return x_0
     else:
-        return x_0 + disp_size * (np.random.rand(x_0.shape) - 0.5), actual_N
+        return x_0 + disp_size * (np.random.rand(x_0.shape) - 0.5)
 
 
 if __name__ == "__main__":
