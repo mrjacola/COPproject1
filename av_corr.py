@@ -15,6 +15,6 @@ def g(corr,bin_edges,nr_steps,L,act_N):
     for j in range(0,len(bin_edges)-1):#Sampling for each bin
         for i in range(0,500): #Resampling 500 times
             sample=np.random.choice(corr[j,:], nr_steps) #For  each bin, we take as many samples as time steps
-        error[j]=np.sqrt(np.var(sample)/(nr_steps-1))
+        sigma_corr[j]=np.sqrt(np.var(sample)/(nr_steps-1))
     
     return av_corr, R, sigma_corr
