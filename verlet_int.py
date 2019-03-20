@@ -8,7 +8,7 @@ import time
 import remove_diag as rd
 import init_lattice as il
 import create_results_file as crf
-import av_corr as ac
+import observables as obs
 
 
 def run_sim(h, t_max, temp, rho, d=3, n=5, plot=True, write_to_file=True):
@@ -48,6 +48,7 @@ def run_sim(h, t_max, temp, rho, d=3, n=5, plot=True, write_to_file=True):
     E_pot = np.zeros(nr_steps)
     E_kin = np.zeros(nr_steps)
     corr = np.zeros([n_bins, nr_steps])
+    press = np.zeros(nr_steps)
 
     # Initial lattice positions
     x[:,:,0] = x_0
@@ -76,7 +77,8 @@ def run_sim(h, t_max, temp, rho, d=3, n=5, plot=True, write_to_file=True):
     x_vec = dx_no_diag
 
     # Calc initial force vector on each particle
-    F = -(np.sum((24 * (1 - 2 * np.power(r, -6)) * np.power(r, -8)).T * x_vec.T, 1)).T
+    f = 24 * (1 - 2 * np.power(r, -6)) * np.power(r, -8)
+    F = -(np.sum((f).T * x_vec.T, 1)).T
 
     lam = 100
     rescale_vel = True
@@ -96,6 +98,8 @@ def run_sim(h, t_max, temp, rho, d=3, n=5, plot=True, write_to_file=True):
         E_tot[t] = E_kin[t] + E_pot[t]
         # Correlation
         corr[:, t], bin_edges = np.histogram(r, n_bins, (0, 1 / 2 * L))  # np.sqrt(3)/2*L
+        # Pressure
+        press[t] = rho * temp + (1 / 6)/(L**3) * np.sum(f * r)
 
         # Rescale velocities for better temperature settings
         if rescale_vel:
@@ -135,7 +139,8 @@ def run_sim(h, t_max, temp, rho, d=3, n=5, plot=True, write_to_file=True):
         x_vec = dx_no_diag
 
         # Calc force vector on each particle
-        F_new = -(np.sum((24 * (1 - 2 * np.power(r, -6)) * np.power(r, -8)).T * x_vec.T, 1)).T
+        f = 24 * (1 - 2 * np.power(r, -6)) * np.power(r, -8)
+        F_new = -(np.sum((f).T * x_vec.T, 1)).T
 
         # For calculation of energy
         r_6 = np.power(r, -6)
@@ -151,7 +156,9 @@ def run_sim(h, t_max, temp, rho, d=3, n=5, plot=True, write_to_file=True):
 
     avg_init_cut = int(0.1 / h)
     # Calc correlation fcn as average
-    av_corr, R = ac.g(corr[:, avg_init_cut:len(corr[0, :])], bin_edges, L, N)
+    av_corr, R, sigma_corr = obs.g(corr[:, avg_init_cut:len(corr[0, :])], bin_edges, nr_steps, L, N)
+    # Pressure
+    av_press, sigma_press = obs.p(press, nr_steps)
     # Calc specific heat
     K_var = np.var(E_kin[avg_init_cut:len(E_kin)])
     K_mean = np.mean(E_kin[avg_init_cut:len(E_kin)])
