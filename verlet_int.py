@@ -8,6 +8,7 @@ import time
 import remove_diag as rd
 import init_lattice as il
 import create_results_file as crf
+import av_corr as ac
 
 
 def run_sim(h, t_max, temp, rho, d=3, n=5, plot=True, write_to_file=True):
@@ -20,6 +21,10 @@ def run_sim(h, t_max, temp, rho, d=3, n=5, plot=True, write_to_file=True):
     nr_steps = int(t_max/h)         # Number of time steps in simulation
     N = 4 * n ** d                  # Number of particles consistent with FCC
     L = np.power(N / rho, 1 / d)    # Simulation box size
+    n_bins = int(N * (N - 1) / 20)  # Number of bins that will
+                                    # be used to calculate the correlation function.
+                                    # With this definition we will get
+                                    # 10 pairs per bin on average
 
     # Calculate lattice
     t0 = time.time()
@@ -32,6 +37,8 @@ def run_sim(h, t_max, temp, rho, d=3, n=5, plot=True, write_to_file=True):
     print("Number density: " + str(rho))
     print("Box size: " + str(L))
     print("Temperature: " + str(temp))
+    print("Simulation time: " + str(t_max))
+    print("Time step: " + str(h))
 
     # Allocation
     x = np.zeros([N, d, nr_steps])
@@ -40,6 +47,7 @@ def run_sim(h, t_max, temp, rho, d=3, n=5, plot=True, write_to_file=True):
     E_tot = np.zeros(nr_steps)
     E_pot = np.zeros(nr_steps)
     E_kin = np.zeros(nr_steps)
+    corr = np.zeros([n_bins, nr_steps])
 
     # Initial lattice positions
     x[:,:,0] = x_0
@@ -72,6 +80,7 @@ def run_sim(h, t_max, temp, rho, d=3, n=5, plot=True, write_to_file=True):
 
     lam = 100
     rescale_vel = True
+    vel_rescalings = 0
 
     # Run simulation in time
     t0 = time.time()
@@ -85,12 +94,15 @@ def run_sim(h, t_max, temp, rho, d=3, n=5, plot=True, write_to_file=True):
         E_pot[t] = np.sum(4 * (r_6 - 1) * r_6) / 2
         # Total
         E_tot[t] = E_kin[t] + E_pot[t]
+        # Correlation
+        corr[:, t], bin_edges = np.histogram(r, n_bins, (0, 1 / 2 * L))  # np.sqrt(3)/2*L
 
         # Rescale velocities for better temperature settings
         if rescale_vel:
             lam = np.sqrt(((N - 1) * (3 / 2) * temp) / (E_kin[t]))
             v[:, :, t] = lam * v[:, :, t]
             print("lambda(" + str(t) + "): " + str(lam))
+            vel_rescalings += 1
 
         if abs(lam - 1) < 1e-3:
             rescale_vel = False
@@ -137,10 +149,21 @@ def run_sim(h, t_max, temp, rho, d=3, n=5, plot=True, write_to_file=True):
     print("Simulation time: "
           + str(int(real_sim_time / 60)) + " min " + str(np.around(real_sim_time % 60, decimals=0)) + " s")
 
+    avg_init_cut = int(0.1 / h)
+    # Calc correlation fcn as average
+    av_corr, R = ac.g(corr[:, avg_init_cut:len(corr[0, :])], bin_edges, L, N)
+    # Calc specific heat
+    K_var = np.var(E_kin[avg_init_cut:len(E_kin)])
+    K_mean = np.mean(E_kin[avg_init_cut:len(E_kin)])
+    specific_heat = (3 * N / 2) / (1 - (3 * N / 2) * K_var / (K_mean * K_mean))
+    print("K_var = " + str(K_var))
+    print("K_mean = " + str(K_mean))
+    print("C_V = " + str(specific_heat))
+
     if write_to_file:
         # Write results to file
         crf.create_results_file("sim_data/T_" + str(temp) + "_rho_" + str(rho) + ".txt",
-                                rho, N, L, temp, h, t_max, real_sim_time)
+                                rho, N, L, temp, h, t_max, real_sim_time, vel_rescalings, spec_heat=specific_heat, corr_func=av_corr, r_vals=R)
 
     if plot:
         fig = plt.figure(num=1, figsize=(10,5))

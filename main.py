@@ -12,10 +12,14 @@ import verlet_int as vi
 
 # Simulation parameters
 time_step = 1e-3
-t_max = 1.0
-temp = 1.0
-rho = 0.8
+t_max = 1e0
+# temp = 1.0
+# rho = 0.8
 
 if __name__ == "__main__":
-
-    vi.run_sim(time_step, t_max, temp, rho)
+    # # Gas
+    # vi.run_sim(time_step, t_max, temp=3.0, rho=0.3, plot=True, write_to_file=False)
+    # # Liquid
+    # vi.run_sim(time_step, t_max, temp=1.0, rho=0.8, plot=False)
+    # Solid
+    vi.run_sim(time_step, t_max, temp=0.5, rho=1.2, plot=True, write_to_file=False)
