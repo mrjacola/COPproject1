@@ -157,13 +157,11 @@ def run_sim(h, t_max, temp, rho, d=3, n=5, plot=True, write_to_file=True):
     # Index for start of averaging, should be after equilibration
     avg_init_cut = int(last_scaling + eq_time)
     # Calc correlation fcn as average
-    av_corr, R, sigma_corr = obs.g(corr[:, avg_init_cut:len(corr[0, :])], bin_edges, nr_steps, L, N)
+    av_corr, R, sigma_corr = obs.g(corr[:, avg_init_cut:nr_steps-2], bin_edges, nr_steps, L, N)
     # Pressure
-    av_press, sigma_press = obs.p(press, nr_steps)
+    av_press, sigma_press = obs.p(press[avg_init_cut:nr_steps-2], nr_steps)
     # Calc specific heat
-    K_var = np.var(E_kin[avg_init_cut:len(E_kin)])
-    K_mean = np.mean(E_kin[avg_init_cut:len(E_kin)])
-    specific_heat = (3 * N / 2) / (1 - (3 * N / 2) * K_var / (K_mean * K_mean))
+    specific_heat, sigma_specific_heat=obs.c(E_kin[avg_init_cut:nr_steps-2], nr_steps)
     t1 = time.time()
     t_obs = t1 - t0
     print("Time to calculate observables: " + str(t_obs))
