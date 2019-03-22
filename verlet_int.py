@@ -77,12 +77,14 @@ def run_sim(h, t_max, temp, rho, d=3, n=5, plot=True, write_to_file=True):
     x_vec = dx_no_diag
 
     # Calc initial force vector on each particle
-    f = 24 * (1 - 2 * np.power(r, -6)) * np.power(r, -8)
-    F = -(np.sum((f).T * x_vec.T, 1)).T
+    f = - 24 * (1 - 2 * np.power(r, -6)) * np.power(r, -8)
+    F = (np.sum(f.T * x_vec.T, 1)).T
 
     lam = 100
     rescale_vel = True
     vel_rescalings = 0
+    last_scaling = 0
+    eq_time = 8e2
 
     # Run simulation in time
     t0 = time.time()
@@ -101,19 +103,16 @@ def run_sim(h, t_max, temp, rho, d=3, n=5, plot=True, write_to_file=True):
         # Pressure
         press[t] = rho * temp + (1 / 6)/(L**3) * np.sum(f * r)
 
-        # Rescale velocities for better temperature settings
-        if rescale_vel:
-            lam = np.sqrt(((N - 1) * (3 / 2) * temp) / (E_kin[t]))
+        # Rescale velocities for better temperature equilibration
+        lam = np.sqrt(((N - 1) * (3 / 2) * temp) / (E_kin[t]))
+        if t != 0 and t % eq_time == 0 and abs(lam - 1) > 5e-2:
             v[:, :, t] = lam * v[:, :, t]
             print("lambda(" + str(t) + "): " + str(lam))
             vel_rescalings += 1
-
-        if abs(lam - 1) < 1e-3:
-            rescale_vel = False
+            last_scaling = t
 
         # Update positions
         x[:, :, t + 1] = x[:, :, t] + v[:, :, t] * h + F * np.square(h) / 2
-
         # Implement boundary conditions
         x[:, :, t + 1][x[:, :, t + 1] > L / 2] = x[:, :, t + 1][x[:, :, t + 1] > L / 2] - L
         x[:, :, t + 1][x[:, :, t + 1] < -L / 2] = x[:, :, t + 1][x[:, :, t + 1] < -L / 2] + L
@@ -139,8 +138,8 @@ def run_sim(h, t_max, temp, rho, d=3, n=5, plot=True, write_to_file=True):
         x_vec = dx_no_diag
 
         # Calc force vector on each particle
-        f = 24 * (1 - 2 * np.power(r, -6)) * np.power(r, -8)
-        F_new = -(np.sum((f).T * x_vec.T, 1)).T
+        f = - 24 * (1 - 2 * np.power(r, -6)) * np.power(r, -8)
+        F_new = (np.sum((f).T * x_vec.T, 1)).T
 
         # For calculation of energy
         r_6 = np.power(r, -6)
@@ -154,7 +153,9 @@ def run_sim(h, t_max, temp, rho, d=3, n=5, plot=True, write_to_file=True):
     print("Simulation time: "
           + str(int(real_sim_time / 60)) + " min " + str(np.around(real_sim_time % 60, decimals=0)) + " s")
 
-    avg_init_cut = int(0.1 / h)
+    t0 = time.time()
+    # Index for start of averaging, should be after equilibration
+    avg_init_cut = int(last_scaling + eq_time)
     # Calc correlation fcn as average
     av_corr, R, sigma_corr = obs.g(corr[:, avg_init_cut:len(corr[0, :])], bin_edges, nr_steps, L, N)
     # Pressure
@@ -163,14 +164,35 @@ def run_sim(h, t_max, temp, rho, d=3, n=5, plot=True, write_to_file=True):
     K_var = np.var(E_kin[avg_init_cut:len(E_kin)])
     K_mean = np.mean(E_kin[avg_init_cut:len(E_kin)])
     specific_heat = (3 * N / 2) / (1 - (3 * N / 2) * K_var / (K_mean * K_mean))
+    t1 = time.time()
+    t_obs = t1 - t0
+    print("Time to calculate observables: " + str(t_obs))
+
     print("K_var = " + str(K_var))
     print("K_mean = " + str(K_mean))
     print("C_V = " + str(specific_heat))
+    print("p = " + str(av_press))
+    print("Last scaling: " + str(last_scaling))
 
     if write_to_file:
         # Write results to file
-        crf.create_results_file("sim_data/T_" + str(temp) + "_rho_" + str(rho) + ".txt",
-                                rho, N, L, temp, h, t_max, real_sim_time, vel_rescalings, spec_heat=specific_heat, corr_func=av_corr, r_vals=R)
+        crf.create_results_file("sim_data/T_" + str(temp) + "_rho_" + str(rho) + "_N_" +str(N) + ".txt",
+                                rho,
+                                N,
+                                L,
+                                temp,
+                                h,
+                                t_max,
+                                real_sim_time,
+                                t_obs,
+                                vel_rescalings,
+                                avg_init_cut,
+                                spec_heat=specific_heat,
+                                pressure=av_press,
+                                corr_func=av_corr,
+                                r_vals=R,
+                                E_kin=E_kin,
+                                E_pot=E_pot)
 
     if plot:
         fig = plt.figure(num=1, figsize=(10,5))
