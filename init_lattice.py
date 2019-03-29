@@ -1,10 +1,9 @@
 import numpy as np
 from itertools import product
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 
 
 def init_sc(N, d, L, rand_disp=False, disp_size=0.1):
+    # Function for giving initial positions in a sc lattice
     # Works for any dimension d
     if np.power(N, 1 / d) % 1 != 0:
         nr_one_d_points = int(np.power(N, 1 / d)) + 1
@@ -21,6 +20,7 @@ def init_sc(N, d, L, rand_disp=False, disp_size=0.1):
 
 
 def init_3dfcc(N, L, rand_disp=False, disp_size=0.1):
+    # Function for giving initial positions in a fcc lattice
     # Works only for 3D
 
     n = int(np.rint(np.power(N / 4, 1 / 3)))
@@ -38,44 +38,3 @@ def init_3dfcc(N, L, rand_disp=False, disp_size=0.1):
         return x_0
     else:
         return x_0 + disp_size * (np.random.rand(x_0.shape) - 0.5)
-
-
-if __name__ == "__main__":
-
-    x = init_3dfcc(100, 10)
-
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    ax.scatter(x[:,0],x[:,1],x[:,2])
-    plt.show()
-
-    print(x)
-
-
-# L = 10
-# x = init_lattice(9, 2, L)
-# print(x.shape)
-#
-# plt.scatter(x[:,0],x[:,1])
-# plt.ylim(-L/2, L/2)
-# plt.xlim(-L/2, L/2)
-# plt.show()
-
-
-
-
-
-
-    # dx = L/np.power(N,1/d)
-    # x_0 = np.zeros(N,d)
-    # x_0[0, :] = (L/2)*np.ones(d)
-    #
-    # for i in range(N):
-    #
-    #     if x_0[i,0] < L/2-dx:
-    #
-    #         x_0[i+1,0] = x_0[i, 0] + dx
-    #         x_0[i+1,1] = x_0[i,1]
-    #     else:
-    #         x_0[i+1,0] = -L/2
-    #         x_0[i+1,1] = x_0[i, 1] + dx
