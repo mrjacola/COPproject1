@@ -28,7 +28,7 @@ def p(press_minus_T_rho, T_true, rho, nr_steps):
     sample = np.zeros(500)
     for i in range(0, 500):  # Resampling 500 times
         sample[i] = np.mean(
-            np.random.choice(press, nr_steps))  # For  each bin, we take the mean of nr_steps randomly chosen values
+            np.random.choice(press, nr_steps)) 
     sigma_press = np.std(sample)
     return mean_press, sigma_press
 
